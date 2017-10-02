@@ -34,12 +34,12 @@ boolean haveDrawn = false;
 boolean leftMask = false;
 
 void setup() {
-  size(800, 800);
+  size(900, 900);
   //frameRate(10);
 
   vive = new ViveConnection();
   vive.connect(HOST_IP, PORT_RX);
-
+    
   final PApplet that = this;
   ArduinoSelector arduinoSelector = new ArduinoSelector(Serial.list(), new ArduinoSelector.SelectionListener() {
     public void selected(String port) {
@@ -75,10 +75,11 @@ void setup() {
 
   String currentImageName = loadStrings("config.txt")[0];
   mask = loadImage(currentImageName);
+  mask.resize((int)(mask.width * 1.8), (int)(mask.height * 1.8));
 
   lines = new Vector<Tuple<PVector, PVector>>();
 
-  plotter = new Plotter(Plotter.Tool.AIRBRUSH, 1000, 800);
+  plotter = new Plotter(Plotter.Tool.AIRBRUSH, 1000, 1000);
 
   registerMethod("dispose", this);
 }
@@ -114,7 +115,7 @@ enum Tool {
   SOLID,
   DASH,
 }
-Tool activeTool = Tool.DASH;
+Tool activeTool = Tool.SOLID;
 
 float dashSize = 10;
 float dashAcc = 0;
@@ -204,18 +205,20 @@ void moveTo(float x, float y) {
 }*/
 
 PVector getNormalizedLocation() {
-  float minX = -100;//-81;
-  float maxX = 100;
+  float minX = -40;//-81;
+  float maxX = 90;
 
-  float minY = 105;
-  float maxY = 164;
+  float minY = -110;
+  float maxY = 70;
 
   float minZ = -150;
   float maxZ = 68;
 
   float normX = map((float)vive.posX(), minX, maxX, 1, 0);
-  float normY = map((float)vive.posY(), minZ, maxZ, 0, 1);
-  float normZ = map((float)vive.posZ(), minY, maxY, 0, 1);
+  float normZ = map((float)vive.posY(), minZ, maxZ, 0, 1);
+  float normY = map((float)vive.posZ(), minY, maxY, 0, 1);
+  
+  //println(vive.posX(), vive.posZ());
 
   return new PVector(normX, normY, normZ);
 }
@@ -225,12 +228,18 @@ void draw() {
   image(mask, 0, 0);
 
   PVector viveLoc = getNormalizedLocation();
-  float viveX = viveLoc.x;
-  float viveY = viveLoc.y;
+  float viveX = viveLoc.x * width;
+  float viveY = viveLoc.y * height;
+  
+  //println(viveX, viveY);
 
   if (viveX >= 0 && viveY >= 0 && viveX < width && viveY < height) {
     float x = viveX;
     float y = viveY;
+    
+    fill(255, 0, 0);
+    noStroke();
+    ellipse(x, y, 8, 8);
 
     if (onMask((int)x, (int)y, mask)) {
       if (leftMask) {

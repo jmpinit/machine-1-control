@@ -49,8 +49,8 @@ class Plotter implements Runnable {
   }
 
   public void moveTo(float x, float y, float z) {
-    int stepsX = (int)(x / MM_PER_X_STEP);
-    int stepsY = (int)(y / MM_PER_Y_STEP);
+    int stepsX = (int)((x + 150) / MM_PER_X_STEP);
+    int stepsY = (int)((y + 250) / MM_PER_Y_STEP);
     int stepsZ = (int)(z / MM_PER_Z_STEP);
 
     float distance = (float)Math.sqrt(Math.pow(stepsX - lastX, 2) + Math.pow(stepsY - lastY, 2) + Math.pow(stepsZ - lastZ, 2));
@@ -66,7 +66,7 @@ class Plotter implements Runnable {
     lastZ = stepsZ;
 
     if (stepsX < 0 || stepsY < 0 || stepsX > getWidthInSteps() || stepsY > getHeightInSteps()) {
-      throw new RuntimeException("Move out of bounds: (" + x + ", " + y + ", " + z + ")");
+      //throw new RuntimeException("Move out of bounds: (" + x + ", " + y + ", " + z + ")");
     }
 
     instructions.add(new MoveInstruction(stepsX, stepsY, stepsZ));

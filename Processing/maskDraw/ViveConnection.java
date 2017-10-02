@@ -13,7 +13,7 @@ public class ViveConnection {
     socket.listen(true);
   }
 
-  void receive(byte[] data, String HOST_IP, int PORT_RX) {
+  public void receive(byte[] data, String HOST_IP, int PORT_RX) {
     String message = new String(data);
     String parts[] = message.split(";");
 
@@ -30,7 +30,7 @@ public class ViveConnection {
     padPressed = Integer.parseInt(parts[8]) > 0;
     gripPressed = Integer.parseInt(parts[9]) > 0;
     
-    System.out.println(x + ", " + y + ", " + z);
+    //System.out.println(x + ", " + y + ", " + z);
   }
 
   float posX() { return x; }
