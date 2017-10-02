@@ -21,8 +21,9 @@ PImage mask;
 int lastMouseX = 0;
 int lastMouseY = 0;
 
-int lastPlotterX = 0;
-int lastPlotterY = 0;
+float lastPlotterX = 0;
+float lastPlotterY = 0;
+boolean spraying = false;
 
 boolean haveDrawn = false;
 boolean leftMask = false;
@@ -101,9 +102,98 @@ void dispose() {
   println("dispose called");
 }
 
-void moveTo(float x, float y) {
-  plotter.moveTo(map(x, 0, width, 0, plotter.getWidthInMM()), map(y, 0, height, 0, plotter.getHeightInMM()));
+enum Tool {
+  SOLID,
+  DASH,
 }
+Tool activeTool = Tool.DASH;
+
+float dashSize = 10;
+float dashAcc = 0;
+boolean dashActive = false;
+
+void moveTo(float x, float y) {
+  float plotterX = map(x, 0, width, 0, plotter.getWidthInMM());
+  float plotterY = map(y, 0, height, 0, plotter.getHeightInMM());
+
+  if (spraying) {
+    if (activeTool == Tool.DASH) {
+      while (true) {
+        float lineLength = dist(lastPlotterX, lastPlotterY, plotterX, plotterY);
+
+        float lenToNext = dashSize - dashAcc % dashSize;
+
+        if (lenToNext > lineLength) {
+          // Line fits inside dash, nothing special to do
+          plotter.moveTo(plotterX, plotterY);
+          dashAcc += lineLength;
+          lastPlotterX = plotterX;
+          lastPlotterY = plotterY;
+          break;
+        } else {
+          // There will be at least one transition
+          float angle = atan2(plotterY - lastPlotterY, plotterX - lastPlotterX);
+
+          float nx = lastPlotterX + lenToNext * cos(angle);
+          float ny = lastPlotterY + lenToNext * sin(angle);
+
+          plotter.moveTo(nx, ny, 0);
+          lastPlotterX = nx;
+          lastPlotterY = ny;
+
+          dashAcc += lenToNext;
+          lenToNext = dashSize - dashAcc % dashSize;
+
+          if (lenToNext < 0) {
+            throw new RuntimeException();
+          }
+
+          dashActive = !dashActive;
+          plotter.spray(dashActive);
+        }
+      }
+    } else {
+      plotter.moveTo(plotterX, plotterY, 0);
+
+      lastPlotterX = plotterX;
+      lastPlotterY = plotterY;
+    }
+  } else {
+    plotter.moveTo(plotterX, plotterY, 0);
+
+    lastPlotterX = plotterX;
+    lastPlotterY = plotterY;
+  }
+}
+
+/*void moveTo(float x, float y) {
+  int plotterX = (int)map(x, 0, width, 0, plotter.getWidthInMM());
+  int plotterY = (int)map(y, 0, height, 0, plotter.getHeightInMM());
+
+  if (spraying) {
+    float lineLength = dist(lastPlotterX, lastPlotterY, plotterX, plotterY);
+    float angle = atan2(plotterY - lastPlotterY, plotterX - lastPlotterX);
+
+    for (float d = 0; d < lineLength - 1;) {
+      float remainingDistance = dist(lastPlotterX, lastPlotterY, plotterX, plotterY);
+      float segmentLength = min(30, remainingDistance);//random(remainingDistance / 4, remainingDistance);
+
+      int nx = (int)(lastPlotterX + segmentLength * cos(angle));
+      int ny = (int)(lastPlotterY + segmentLength * sin(angle));
+
+      plotter.moveTo(nx, ny, random(0, 3));
+      d += segmentLength;
+
+      lastPlotterX = nx;
+      lastPlotterY = ny;
+    }
+  } else {
+    plotter.moveTo(plotterX, plotterY, 0);
+
+    lastPlotterX = plotterX;
+    lastPlotterY = plotterY;
+  }
+}*/
 
 void draw() {
   background(0);
@@ -119,6 +209,7 @@ void draw() {
         PVector entryPt = lastPointOnMask(x, y, lastMouseX, lastMouseY, mask);
         moveTo(entryPt.x, entryPt.y);
         plotter.spray(true);
+        spraying = true;
         moveTo(x, y);
         lines.add(new Tuple<PVector, PVector>(new PVector(entryPt.x, entryPt.y), new PVector(x, y)));
         leftMask = false;
@@ -134,6 +225,7 @@ void draw() {
         PVector exitPt = lastPointOnMask(lastMouseX, lastMouseY, x, y, mask);
         moveTo(exitPt.x, exitPt.y);
         plotter.spray(false);
+        spraying = false;
 
         lines.add(new Tuple<PVector, PVector>(new PVector(lastMouseX, lastMouseY), new PVector(exitPt.x, exitPt.y)));
 
@@ -266,7 +358,7 @@ PVector lastPointOnMask(int x0, int y0, int x1, int y1, PImage mask) {
 
 void keyPressed() {
   if (key == 'h') {
-    plotter.moveTo(0, 0);
+    plotter.moveTo(0, 0, 0);
   } else if (key == 'p') {
     plotter.moveTo(200, 800);
   }
