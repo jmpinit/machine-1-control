@@ -1,5 +1,6 @@
 import java.util.*;
 import processing.serial.*;
+import hypermedia.net.*;
 
 class Tuple<X, Y> {
   public final X x;
@@ -10,6 +11,10 @@ class Tuple<X, Y> {
     this.y = y;
   }
 }
+
+ViveConnection vive;
+int PORT_RX = 8051;
+String HOST_IP = "127.0.0.1";
 
 Vector<Tuple<PVector, PVector>> lines;
 
@@ -31,6 +36,9 @@ boolean leftMask = false;
 void setup() {
   size(800, 800);
   //frameRate(10);
+
+  vive = new ViveConnection();
+  vive.connect(HOST_IP, PORT_RX);
 
   final PApplet that = this;
   ArduinoSelector arduinoSelector = new ArduinoSelector(Serial.list(), new ArduinoSelector.SelectionListener() {
@@ -195,18 +203,39 @@ void moveTo(float x, float y) {
   }
 }*/
 
+PVector getNormalizedLocation() {
+  float minX = -100;//-81;
+  float maxX = 100;
+
+  float minY = 105;
+  float maxY = 164;
+
+  float minZ = -150;
+  float maxZ = 68;
+
+  float normX = map((float)vive.posX(), minX, maxX, 1, 0);
+  float normY = map((float)vive.posY(), minZ, maxZ, 0, 1);
+  float normZ = map((float)vive.posZ(), minY, maxY, 0, 1);
+
+  return new PVector(normX, normY, normZ);
+}
+
 void draw() {
   background(0);
   image(mask, 0, 0);
 
-  if (mouseX >= 0 && mouseY >= 0 && mouseX < width && mouseY < height) {
-    int x = mouseX;
-    int y = mouseY;
+  PVector viveLoc = getNormalizedLocation();
+  float viveX = viveLoc.x;
+  float viveY = viveLoc.y;
 
-    if (onMask(mouseX, mouseY, mask)) {
+  if (viveX >= 0 && viveY >= 0 && viveX < width && viveY < height) {
+    float x = viveX;
+    float y = viveY;
+
+    if (onMask((int)x, (int)y, mask)) {
       if (leftMask) {
         // Mouse has entered the mask
-        PVector entryPt = lastPointOnMask(x, y, lastMouseX, lastMouseY, mask);
+        PVector entryPt = lastPointOnMask((int)x, (int)y, lastMouseX, lastMouseY, mask);
         moveTo(entryPt.x, entryPt.y);
         plotter.spray(true);
         spraying = true;
@@ -215,14 +244,14 @@ void draw() {
         leftMask = false;
       }
 
-      if (onMask(lastMouseX, lastMouseY, x, y, mask)) {
+      if (onMask(lastMouseX, lastMouseY, (int)x, (int)y, mask)) {
         moveTo(x, y);
         lines.add(new Tuple<PVector, PVector>(new PVector(lastMouseX, lastMouseY), new PVector(x, y)));
       }
     } else {
       if (leftMask == false) {
         // Last position was on the mask
-        PVector exitPt = lastPointOnMask(lastMouseX, lastMouseY, x, y, mask);
+        PVector exitPt = lastPointOnMask(lastMouseX, lastMouseY, (int)x, (int)y, mask);
         moveTo(exitPt.x, exitPt.y);
         plotter.spray(false);
         spraying = false;
@@ -233,8 +262,8 @@ void draw() {
       }
     }
 
-    lastMouseX = x;
-    lastMouseY = y;
+    lastMouseX = (int)x;
+    lastMouseY = (int)y;
   }
 
   stroke(255);
