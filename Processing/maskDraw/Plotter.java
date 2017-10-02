@@ -12,7 +12,7 @@ class Plotter implements Runnable {
   private final float MM_PER_Z_STEP = 0.0037f;
 
   private final float widthInMM, heightInMM;
-  private float lastX, lastY, lastZ;
+  private int lastX, lastY, lastZ;
 
   public enum Tool {
     AIRBRUSH,
@@ -49,11 +49,27 @@ class Plotter implements Runnable {
   }
 
   public void moveTo(float x, float y, float z) {
-    lastX = x;
-    lastY = y;
-    lastZ = z;
+    int stepsX = (int)(x / MM_PER_X_STEP);
+    int stepsY = (int)(y / MM_PER_Y_STEP);
+    int stepsZ = (int)(z / MM_PER_Z_STEP);
 
-    instructions.add(new MoveInstruction(x, y, z));
+    float distance = (float)Math.sqrt(Math.pow(stepsX - lastX, 2) + Math.pow(stepsY - lastY, 2) + Math.pow(stepsZ - lastZ, 2));
+
+    //if (stepsX == lastX && stepsY == lastY && stepsZ == lastZ) {
+    if (distance < 100) {
+      // Not enough for the machine to do
+      return;
+    }
+
+    lastX = stepsX;
+    lastY = stepsY;
+    lastZ = stepsZ;
+
+    if (stepsX < 0 || stepsY < 0 || stepsX > getWidthInSteps() || stepsY > getHeightInSteps()) {
+      throw new RuntimeException("Move out of bounds: (" + x + ", " + y + ", " + z + ")");
+    }
+
+    instructions.add(new MoveInstruction(stepsX, stepsY, stepsZ));
   }
 
   public void rotate(float xAngle, float yAngle) {
@@ -145,14 +161,10 @@ class Plotter implements Runnable {
   class MoveInstruction extends Instruction {
     private final int x, y, z;
 
-    public MoveInstruction(float x, float y, float z) {
-      this.x = (int)(x / MM_PER_X_STEP);
-      this.y = (int)(y / MM_PER_Y_STEP);
-      this.z = (int)(z / MM_PER_Z_STEP);
-
-      if (this.x < 0 || this.y < 0 || this.x > getWidthInSteps() || this.y > getHeightInSteps()) {
-        throw new RuntimeException("Move out of bounds: (" + x + ", " + y + ", " + z + ")");
-      }
+    public MoveInstruction(int x, int y, int z) {
+      this.x = x;
+      this.y = y;
+      this.z = z;
     }
 
     public int[] getData() {

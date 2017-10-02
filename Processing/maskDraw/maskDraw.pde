@@ -18,14 +18,18 @@ Thread plotterThread;
 
 PImage mask;
 
-int lastX = 0;
-int lastY = 0;
+int lastMouseX = 0;
+int lastMouseY = 0;
+
+int lastPlotterX = 0;
+int lastPlotterY = 0;
+
 boolean haveDrawn = false;
 boolean leftMask = false;
 
 void setup() {
   size(800, 800);
-  frameRate(10);
+  //frameRate(10);
 
   final PApplet that = this;
   ArduinoSelector arduinoSelector = new ArduinoSelector(Serial.list(), new ArduinoSelector.SelectionListener() {
@@ -34,7 +38,13 @@ void setup() {
 
       plotter.addMessageListener(new Plotter.MessageListener() {
         public void onMessage(int[] message) {
-          println("Hey, plotter has a message:", (char)message[0], message[1], message[2], message[3]);
+          char cmd = (char)message[0];
+
+          int a = (message[2] << 8) | message[1];
+          int b = (message[4] << 8) | message[3];
+          int c = (message[6] << 8) | message[5];
+
+          println("Hey, plotter has a message:", cmd, a, b, c);
           for (int i = 0; i < message.length; i++) {
             arduinoPort.write(message[i]);
           }
@@ -91,43 +101,48 @@ void dispose() {
   println("dispose called");
 }
 
+void moveTo(float x, float y) {
+  plotter.moveTo(map(x, 0, width, 0, plotter.getWidthInMM()), map(y, 0, height, 0, plotter.getHeightInMM()));
+}
+
 void draw() {
   background(0);
   image(mask, 0, 0);
 
   if (mouseX >= 0 && mouseY >= 0 && mouseX < width && mouseY < height) {
-    if (onMask(mouseX, mouseY, mask)) {
-      int x = mouseX;
-      int y = mouseY;
+    int x = mouseX;
+    int y = mouseY;
 
+    if (onMask(mouseX, mouseY, mask)) {
       if (leftMask) {
-        PVector last = lastPointOnMask(mouseX, mouseY, lastX, lastY, mask);
-        lastX = (int)last.x;
-        lastY = (int)last.y;
+        // Mouse has entered the mask
+        PVector entryPt = lastPointOnMask(x, y, lastMouseX, lastMouseY, mask);
+        moveTo(entryPt.x, entryPt.y);
+        plotter.spray(true);
+        moveTo(x, y);
+        lines.add(new Tuple<PVector, PVector>(new PVector(entryPt.x, entryPt.y), new PVector(x, y)));
         leftMask = false;
       }
 
-      if (onMask(lastX, lastY, x, y, mask)) {
-        plotter.moveTo(map(lastX, 0, width, 0, plotter.getWidthInMM()), map(lastY, 0, height, 0, plotter.getHeightInMM()));
-        plotter.spray(true);
-        plotter.moveTo(map(x, 0, width, 0, plotter.getWidthInMM()), map(y, 0, height, 0, plotter.getHeightInMM()));
-        plotter.spray(false);
+      if (onMask(lastMouseX, lastMouseY, x, y, mask)) {
+        moveTo(x, y);
+        lines.add(new Tuple<PVector, PVector>(new PVector(lastMouseX, lastMouseY), new PVector(x, y)));
       }
-
-      lastX = x;
-      lastY = y;
     } else {
       if (leftMask == false) {
         // Last position was on the mask
-        PVector last = lastPointOnMask(lastX, lastY, mouseX, mouseY, mask);
-        plotter.moveTo(map(lastX, 0, width, 0, plotter.getWidthInMM()), map(lastY, 0, height, 0, plotter.getHeightInMM()));
-        plotter.spray(true);
-        plotter.moveTo(map(last.x, 0, width, 0, plotter.getWidthInMM()), map(last.y, 0, height, 0, plotter.getHeightInMM()));
+        PVector exitPt = lastPointOnMask(lastMouseX, lastMouseY, x, y, mask);
+        moveTo(exitPt.x, exitPt.y);
         plotter.spray(false);
+
+        lines.add(new Tuple<PVector, PVector>(new PVector(lastMouseX, lastMouseY), new PVector(exitPt.x, exitPt.y)));
 
         leftMask = true;
       }
     }
+
+    lastMouseX = x;
+    lastMouseY = y;
   }
 
   stroke(255);
