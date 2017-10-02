@@ -158,7 +158,7 @@ class Plotter implements Runnable {
     public int[] getData() {
       // Negate and switch X and Y so the origin is in the upper left relative
       // to the controls
-      return makePacket('m', -y, -x, z);
+      return makePacket('m', y, x, z);
     }
 
     public boolean needsSync() {

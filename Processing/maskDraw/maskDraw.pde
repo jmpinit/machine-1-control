@@ -64,10 +64,20 @@ void setup() {
   registerMethod("dispose", this);
 }
 
+String buffer = "";
 void serialEvent(Serial port) {
   int c = port.read();
-  plotter.receiveMessage(c);
-  print((char)c);
+  buffer += (char)c;
+
+  if (buffer.charAt(buffer.length() - 1) == '\n') {
+    if (buffer.equals("d\n")) {
+      plotter.receiveMessage('d');
+    } else {
+      print(buffer);
+    }
+
+    buffer = "";
+  }
 }
 
 void dispose() {
