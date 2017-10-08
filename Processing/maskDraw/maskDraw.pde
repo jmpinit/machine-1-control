@@ -33,13 +33,21 @@ boolean spraying = false;
 boolean haveDrawn = false;
 boolean leftMask = false;
 
+enum AppMode {
+  SETUP,
+  PAINT,
+};
+
+AppMode mode = AppMode.SETUP;
+SetupState setup;
+
 void setup() {
   size(900, 900);
   //frameRate(10);
 
   vive = new ViveConnection();
   vive.connect(HOST_IP, PORT_RX);
-    
+
   final PApplet that = this;
   ArduinoSelector arduinoSelector = new ArduinoSelector(Serial.list(), new ArduinoSelector.SelectionListener() {
     public void selected(String port) {
@@ -80,35 +88,95 @@ void setup() {
   lines = new Vector<Tuple<PVector, PVector>>();
 
   plotter = new Plotter(Plotter.Tool.AIRBRUSH, 1000, 1000);
+  setup = new SetupState(plotter);
 
   registerMethod("dispose", this);
 }
 
-String buffer = "";
-void serialEvent(Serial port) {
-  int c = port.read();
-  buffer += (char)c;
+void draw() {
+  background(0);
 
-  if (buffer.charAt(buffer.length() - 1) == '\n') {
-    if (buffer.equals("d\n")) {
-      plotter.receiveMessage('d');
-    } else {
-      print(buffer);
+  // Draw machine bounds
+  Bounds screenBounds = setup.getScreenBounds(width, height);
+
+  // Draw mask image
+  image(mask, screenBounds.left, screenBounds.top);
+
+  stroke(255);
+  noFill();
+  rect(screenBounds.left, screenBounds.top, screenBounds.width, screenBounds.height);
+
+  if (mode == AppMode.SETUP) {
+    noStroke();
+    fill(0, 255, 0);
+    PVector pos = setup.currentPosition();
+    ellipse(pos.x, pos.y, 10, 10);
+  } else if (mode == AppMode.PAINT) {
+    paintOnMask();
+
+    stroke(255);
+    synchronized (lines) {
+      for (Tuple<PVector, PVector> line : lines) {
+        PVector start = line.x;
+        PVector end = line.y;
+
+        stroke(255, 0, 0);
+        line(start.x, start.y, end.x, end.y);
+      }
     }
-
-    buffer = "";
   }
 }
 
-void dispose() {
-  plotter.moveTo(0, 0);
-  plotter.stop();
+void paintOnMask() {
+  Bounds machineBounds = setup.getBounds();
+  PVector viveLoc = getNormalizedLocation();
 
-  try {
-    plotterThread.join();
-  } catch (InterruptedException e) {}
+  if (viveLoc.x >= 0 && viveLoc.y >= 0 && viveLoc.x < width && viveLoc.y < height) {
+    float x = viveLoc.x;
+    float y = viveLoc.y;
 
-  println("dispose called");
+    Bounds screenBounds = setup.getScreenBounds(width, height);
+
+    float imageX = x * screenBounds.width;
+    float imageY = y * screenBounds.height;
+
+    fill(255, 0, 0);
+    noStroke();
+    ellipse(screenBounds.left + x * screenBounds.width, screenBounds.top + y * screenBounds.height, 8, 8);
+
+    if (onMask((int)imageX, (int)imageY, mask)) {
+      if (leftMask) {
+        // Mouse has entered the mask
+        PVector entryPt = lastPointOnMask((int)imageX, (int)imageY, lastMouseX, lastMouseY, mask);
+        moveTo(entryPt.x, entryPt.y);
+        plotter.spray(true);
+        spraying = true;
+        moveTo(imageX, imageY);
+        lines.add(new Tuple<PVector, PVector>(new PVector(entryPt.x, entryPt.y), new PVector(imageX, imageY)));
+        leftMask = false;
+      }
+
+      if (onMask(lastMouseX, lastMouseY, (int)imageX, (int)imageY, mask)) {
+        moveTo(imageX, imageY);
+        lines.add(new Tuple<PVector, PVector>(new PVector(lastMouseX, lastMouseY), new PVector(imageX, imageY)));
+      }
+    } else {
+      if (leftMask == false) {
+        // Last position was on the mask
+        PVector exitPt = lastPointOnMask(lastMouseX, lastMouseY, (int)imageX, (int)imageY, mask);
+        moveTo(exitPt.x, exitPt.y);
+        plotter.spray(false);
+        spraying = false;
+
+        lines.add(new Tuple<PVector, PVector>(new PVector(lastMouseX, lastMouseY), new PVector(exitPt.x, exitPt.y)));
+
+        leftMask = true;
+      }
+    }
+
+    lastMouseX = (int)imageX;
+    lastMouseY = (int)imageY;
+  }
 }
 
 enum Tool {
@@ -175,6 +243,33 @@ void moveTo(float x, float y) {
   }
 }
 
+String buffer = "";
+void serialEvent(Serial port) {
+  int c = port.read();
+  buffer += (char)c;
+
+  if (buffer.charAt(buffer.length() - 1) == '\n') {
+    if (buffer.equals("d\n")) {
+      plotter.receiveMessage('d');
+    } else {
+      print(buffer);
+    }
+
+    buffer = "";
+  }
+}
+
+void dispose() {
+  plotter.moveTo(0, 0);
+  plotter.stop();
+
+  try {
+    plotterThread.join();
+  } catch (InterruptedException e) {}
+
+  println("dispose called");
+}
+
 /*void moveTo(float x, float y) {
   int plotterX = (int)map(x, 0, width, 0, plotter.getWidthInMM());
   int plotterY = (int)map(y, 0, height, 0, plotter.getHeightInMM());
@@ -217,74 +312,10 @@ PVector getNormalizedLocation() {
   float normX = map((float)vive.posX(), minX, maxX, 1, 0);
   float normZ = map((float)vive.posY(), minZ, maxZ, 0, 1);
   float normY = map((float)vive.posZ(), minY, maxY, 0, 1);
-  
+
   //println(vive.posX(), vive.posZ());
 
   return new PVector(normX, normY, normZ);
-}
-
-void draw() {
-  background(0);
-  image(mask, 0, 0);
-
-  PVector viveLoc = getNormalizedLocation();
-  float viveX = viveLoc.x * width;
-  float viveY = viveLoc.y * height;
-  
-  //println(viveX, viveY);
-
-  if (viveX >= 0 && viveY >= 0 && viveX < width && viveY < height) {
-    float x = viveX;
-    float y = viveY;
-    
-    fill(255, 0, 0);
-    noStroke();
-    ellipse(x, y, 8, 8);
-
-    if (onMask((int)x, (int)y, mask)) {
-      if (leftMask) {
-        // Mouse has entered the mask
-        PVector entryPt = lastPointOnMask((int)x, (int)y, lastMouseX, lastMouseY, mask);
-        moveTo(entryPt.x, entryPt.y);
-        plotter.spray(true);
-        spraying = true;
-        moveTo(x, y);
-        lines.add(new Tuple<PVector, PVector>(new PVector(entryPt.x, entryPt.y), new PVector(x, y)));
-        leftMask = false;
-      }
-
-      if (onMask(lastMouseX, lastMouseY, (int)x, (int)y, mask)) {
-        moveTo(x, y);
-        lines.add(new Tuple<PVector, PVector>(new PVector(lastMouseX, lastMouseY), new PVector(x, y)));
-      }
-    } else {
-      if (leftMask == false) {
-        // Last position was on the mask
-        PVector exitPt = lastPointOnMask(lastMouseX, lastMouseY, (int)x, (int)y, mask);
-        moveTo(exitPt.x, exitPt.y);
-        plotter.spray(false);
-        spraying = false;
-
-        lines.add(new Tuple<PVector, PVector>(new PVector(lastMouseX, lastMouseY), new PVector(exitPt.x, exitPt.y)));
-
-        leftMask = true;
-      }
-    }
-
-    lastMouseX = (int)x;
-    lastMouseY = (int)y;
-  }
-
-  stroke(255);
-  synchronized (lines) {
-    for (Tuple<PVector, PVector> line : lines) {
-      PVector start = line.x;
-      PVector end = line.y;
-
-      stroke(255, 0, 0);
-      line(start.x, start.y, end.x, end.y);
-    }
-  }
 }
 
 boolean onMask(int x, int y, PImage mask) {
@@ -395,6 +426,47 @@ PVector lastPointOnMask(int x0, int y0, int x1, int y1, PImage mask) {
 }
 
 void keyPressed() {
+  if (mode == AppMode.SETUP) {
+    if (key == CODED) {
+      switch (keyCode) {
+        case UP:
+          setup.jogUp();
+          break;
+        case LEFT:
+          setup.jogLeft();
+          break;
+        case DOWN:
+          setup.jogDown();
+          break;
+        case RIGHT:
+          setup.jogRight();
+          break;
+      }
+    } else {
+      switch (key) {
+        case 'w':
+          setup.jogUp();
+          break;
+        case 'a':
+          setup.jogLeft();
+          break;
+        case 's':
+          setup.jogDown();
+          break;
+        case 'd':
+          setup.jogRight();
+          break;
+        case ' ':
+          setup.setLowerRight();
+          break;
+        case ENTER:
+          mode = AppMode.PAINT;
+          break;
+      }
+    }
+  } else if (mode == AppMode.PAINT) {
+  }
+
   if (key == 'h') {
     plotter.moveTo(0, 0, 0);
   } else if (key == 'p') {
