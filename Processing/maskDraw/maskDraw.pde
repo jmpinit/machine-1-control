@@ -60,6 +60,7 @@ Vector<Tuple<PVector, PVector>> lines;
 Plotter plotter;
 Thread plotterThread;
 
+final LayerFrame layerFrame = new LayerFrame();
 Vector<Tuple<String, PImage>> images;
 
 int lastMouseX = 0;
@@ -160,19 +161,23 @@ void setup() {
   gui.addListener(new MaskDrawGUI.Listener() {
     public void imageImported(String name, PImage image) {
       images.add(new Tuple<String, PImage>(name, image));
+      layerFrame.addLayer(name);
       println("Added image \"" + name + "\"");
     }
   });
 }
 
 void draw() {
+  background(0);
+
   for (Tuple<String, PImage> namedImage : images) {
     String name = namedImage.x;
     PImage theImage = namedImage.y;
 
-    image(theImage, 0, 0);
+    if (layerFrame.isEnabled(name)) {
+      image(theImage, 0, 0);
+    }
   }
-  //background(0);
 
   /*
   // Draw machine bounds
