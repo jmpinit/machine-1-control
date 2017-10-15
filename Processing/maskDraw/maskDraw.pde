@@ -1,16 +1,55 @@
 import java.util.*;
+import java.awt.*;
+import java.awt.event.ActionListener;
+import java.awt.event.ActionEvent;
+
 import processing.serial.*;
+import processing.awt.PSurfaceAWT;
+
 import hypermedia.net.*;
+import org.mozilla.javascript.*;
 
-class Tuple<X, Y> {
-  public final X x;
-  public final Y y;
+/* THE PLAN
 
-  public Tuple(X x, Y y) {
-    this.x = x;
-    this.y = y;
-  }
-}
+Build the path out of MotionSegments which can be parameterized by distance
+Make it easy to recalculate the path from a JS function
+
+# EFFECTS
+
+Effects that do not modify path:
+  * dotted line
+  * thick at segment ends, thin in center
+  * paint size depends on shadowed pixel value in underlying image>q
+
+Effects that modify path:
+  * gravity: all lines bend toward attractors
+    - attraction depends on local image intensity
+  * confine to preset corridors
+    - grid
+    - city streets
+    - small, touching circles
+  * inertial brush: simulate very heavy brush that takes a while to stop
+  * sinewave with random amplitude
+  * fat raster line: zig back and forth to make line larger
+  * fat dithered line: raster line while flipping air on/off based on line darkness
+
+# BRUSHES
+
+Triggers
+  * ever
+
+Function gets called with a context object. Return value is a set of points with the format: { x, y, z, paint, air }. 
+
+Available inputs:
+  * state (initialized from JSON file)
+  * aspect ratio
+  * points in path so far
+  * time since last point
+
+API
+  * velocity vector
+
+*/
 
 ViveConnection vive;
 int PORT_RX = 8051;
@@ -21,7 +60,7 @@ Vector<Tuple<PVector, PVector>> lines;
 Plotter plotter;
 Thread plotterThread;
 
-PImage mask;
+Vector<Tuple<String, PImage>> images;
 
 int lastMouseX = 0;
 int lastMouseY = 0;
@@ -43,11 +82,32 @@ SetupState setup;
 
 void setup() {
   size(900, 900);
-  //frameRate(10);
+
+  images = new Vector<Tuple<String, PImage>>();
+
+  // Creates and enters a Context. The Context stores information
+  // about the execution environment of a script.
+  Context cx = Context.enter();
+  try {
+      // Initialize the standard objects (Object, Function, etc.)
+      // This must be done before scripts can be executed. Returns
+      // a scope object that we use in later calls.
+      Scriptable scope = cx.initStandardObjects();
+
+      // Now evaluate the string we've colected.
+      Object result = cx.evaluateString(scope, "5 + 20", "<cmd>", 1, null);
+
+      // Convert the result to a string and print it.
+      println(Context.toString(result));
+  } finally {
+      // Exit from the context.
+      Context.exit();
+  }
 
   vive = new ViveConnection();
   vive.connect(HOST_IP, PORT_RX);
 
+  /*
   final PApplet that = this;
   ArduinoSelector arduinoSelector = new ArduinoSelector(Serial.list(), new ArduinoSelector.SelectionListener() {
     public void selected(String port) {
@@ -89,13 +149,32 @@ void setup() {
 
   plotter = new Plotter(Plotter.Tool.AIRBRUSH, 1000, 1000);
   setup = new SetupState(plotter);
+  */
 
   registerMethod("dispose", this);
+
+  PSurfaceAWT awtSurface = (PSurfaceAWT)surface;
+  PSurfaceAWT.SmoothCanvas smoothCanvas = (PSurfaceAWT.SmoothCanvas)awtSurface.getNative();
+
+  MaskDrawGUI gui = new MaskDrawGUI(smoothCanvas.getFrame());
+  gui.addListener(new MaskDrawGUI.Listener() {
+    public void imageImported(String name, PImage image) {
+      images.add(new Tuple<String, PImage>(name, image));
+      println("Added image \"" + name + "\"");
+    }
+  });
 }
 
 void draw() {
-  background(0);
+  for (Tuple<String, PImage> namedImage : images) {
+    String name = namedImage.x;
+    PImage theImage = namedImage.y;
 
+    image(theImage, 0, 0);
+  }
+  //background(0);
+
+  /*
   // Draw machine bounds
   Bounds screenBounds = setup.getScreenBounds(width, height);
 
@@ -125,9 +204,11 @@ void draw() {
       }
     }
   }
+  */
 }
 
 void paintOnMask() {
+  /*
   Bounds machineBounds = setup.getBounds();
   PVector viveLoc = getNormalizedLocation();
 
@@ -177,6 +258,7 @@ void paintOnMask() {
     lastMouseX = (int)imageX;
     lastMouseY = (int)imageY;
   }
+  */
 }
 
 enum Tool {
