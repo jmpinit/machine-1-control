@@ -7,7 +7,7 @@ import processing.serial.*;
 import processing.awt.PSurfaceAWT;
 
 import hypermedia.net.*;
-import org.mozilla.javascript.*;
+//import org.mozilla.javascript.*;
 
 /* THE PLAN
 
@@ -61,7 +61,8 @@ Plotter plotter;
 Thread plotterThread;
 
 final LayerFrame layerFrame = new LayerFrame();
-Vector<Tuple<String, PImage>> images;
+PImage combinedMask;
+Vector<Tuple<String, PImage>> namedImages;
 
 int lastMouseX = 0;
 int lastMouseY = 0;
@@ -79,13 +80,14 @@ enum AppMode {
 };
 
 AppMode mode = AppMode.SETUP;
-SetupState setup;
+//SetupState setup;
 
 void setup() {
   size(900, 900);
 
-  images = new Vector<Tuple<String, PImage>>();
+  namedImages = new Vector<Tuple<String, PImage>>();
 
+  /*
   // Creates and enters a Context. The Context stores information
   // about the execution environment of a script.
   Context cx = Context.enter();
@@ -104,6 +106,7 @@ void setup() {
       // Exit from the context.
       Context.exit();
   }
+  */
 
   vive = new ViveConnection();
   vive.connect(HOST_IP, PORT_RX);
@@ -148,9 +151,8 @@ void setup() {
 
   lines = new Vector<Tuple<PVector, PVector>>();
 
-  plotter = new Plotter(Plotter.Tool.AIRBRUSH, 1000, 1000);
-  setup = new SetupState(plotter);
-  */
+  plotter = new Plotter(Plotter.Tool.AIRBRUSH, 1000, 1000);*/
+  //setup = new SetupState(plotter);
 
   registerMethod("dispose", this);
 
@@ -160,23 +162,48 @@ void setup() {
   MaskDrawGUI gui = new MaskDrawGUI(smoothCanvas.getFrame());
   gui.addListener(new MaskDrawGUI.Listener() {
     public void imageImported(String name, PImage image) {
-      images.add(new Tuple<String, PImage>(name, image));
+      image.loadPixels();
+
+      // Threshold image
+      for (int y = 0; y < image.height; y++) {
+        for (int x = 0; x < image.width; x++) {
+          int c = color((brightness(image.get(x, y)) < 127) ? 0 : 255);
+          image.set(x, y, c);
+        }
+      }
+
+      image.updatePixels();
+
+      namedImages.add(new Tuple<String, PImage>(name, image));
       layerFrame.addLayer(name);
+
+      combinedMask = recalculateMask();
       println("Added image \"" + name + "\"");
     }
   });
+
+  layerFrame.addListener(new LayerFrame.Listener () {
+    public void layerAdded(String name) {}
+
+    public void layerEnabled(String name) {
+      combinedMask = recalculateMask();
+      println(name, "enabled");
+    }
+
+    public void layerDisabled(String name) {
+      combinedMask = recalculateMask();
+      println(name, "disabled");
+    }
+  });
+
+  combinedMask = recalculateMask();
 }
 
 void draw() {
   background(0);
 
-  for (Tuple<String, PImage> namedImage : images) {
-    String name = namedImage.x;
-    PImage theImage = namedImage.y;
-
-    if (layerFrame.isEnabled(name)) {
-      image(theImage, 0, 0);
-    }
+  if (combinedMask != null) {
+    image(combinedMask, 0, 0);
   }
 
   /*
@@ -210,6 +237,53 @@ void draw() {
     }
   }
   */
+}
+
+Bounds imagesBounds(Vector<PImage> images) {
+  float maxWidth = 0;
+  float maxHeight = 0;
+
+  for (PImage image : images) {
+    if (image.width > maxWidth) {
+      maxWidth = image.width;
+    }
+
+    if (image.height > maxHeight) {
+      maxHeight = image.height;
+    }
+  }
+
+  return new Bounds(width, height);
+}
+
+PImage recalculateMask() {
+  if (namedImages.size() == 0) {
+    return null;
+  }
+
+  Vector<PImage> images = new Vector<PImage>();
+  for (Tuple<String, PImage> namedImage : namedImages) {
+    images.add(namedImage.y);
+  }
+
+  Bounds bounds = imagesBounds(images);
+  PGraphics mask = createGraphics((int)bounds.width, (int)bounds.height);
+
+  mask.beginDraw();
+
+  // OR all the images together onto one mask
+  for (Tuple<String, PImage> namedImage : namedImages) {
+    String name = namedImage.x;
+    PImage image = namedImage.y;
+
+    if (layerFrame.isEnabled(name)) {
+      mask.image(image, 0, 0);
+    }
+  }
+
+  mask.endDraw();
+
+  return mask.get();
 }
 
 void paintOnMask() {
@@ -276,7 +350,7 @@ float dashSize = 10;
 float dashAcc = 0;
 boolean dashActive = false;
 
-void moveTo(float x, float y) {
+/*void moveTo(float x, float y) {
   float plotterX = map(x, 0, width, 0, plotter.getWidthInMM());
   float plotterY = map(y, 0, height, 0, plotter.getHeightInMM());
 
@@ -328,7 +402,7 @@ void moveTo(float x, float y) {
     lastPlotterX = plotterX;
     lastPlotterY = plotterY;
   }
-}
+}*/
 
 String buffer = "";
 void serialEvent(Serial port) {
@@ -357,37 +431,8 @@ void dispose() {
   println("dispose called");
 }
 
-/*void moveTo(float x, float y) {
-  int plotterX = (int)map(x, 0, width, 0, plotter.getWidthInMM());
-  int plotterY = (int)map(y, 0, height, 0, plotter.getHeightInMM());
-
-  if (spraying) {
-    float lineLength = dist(lastPlotterX, lastPlotterY, plotterX, plotterY);
-    float angle = atan2(plotterY - lastPlotterY, plotterX - lastPlotterX);
-
-    for (float d = 0; d < lineLength - 1;) {
-      float remainingDistance = dist(lastPlotterX, lastPlotterY, plotterX, plotterY);
-      float segmentLength = min(30, remainingDistance);//random(remainingDistance / 4, remainingDistance);
-
-      int nx = (int)(lastPlotterX + segmentLength * cos(angle));
-      int ny = (int)(lastPlotterY + segmentLength * sin(angle));
-
-      plotter.moveTo(nx, ny, random(0, 3));
-      d += segmentLength;
-
-      lastPlotterX = nx;
-      lastPlotterY = ny;
-    }
-  } else {
-    plotter.moveTo(plotterX, plotterY, 0);
-
-    lastPlotterX = plotterX;
-    lastPlotterY = plotterY;
-  }
-}*/
-
 PVector getNormalizedLocation() {
-  float minX = -40;//-81;
+  float minX = -40;
   float maxX = 90;
 
   float minY = -110;
@@ -399,8 +444,6 @@ PVector getNormalizedLocation() {
   float normX = map((float)vive.posX(), minX, maxX, 1, 0);
   float normZ = map((float)vive.posY(), minZ, maxZ, 0, 1);
   float normY = map((float)vive.posZ(), minY, maxY, 0, 1);
-
-  //println(vive.posX(), vive.posZ());
 
   return new PVector(normX, normY, normZ);
 }
@@ -458,7 +501,7 @@ boolean onMask(int x0, int y0, int x1, int y1, PImage mask) {
 }
 
 PVector lastPointOnMask(int x0, int y0, int x1, int y1, PImage mask) {
-  // delta of exact value and rounded value of the dependant variable
+  // delta of exact value and rounded value of the dependent variable
   int d = 0;
 
   int dy = abs(y1 - y0);
@@ -513,7 +556,7 @@ PVector lastPointOnMask(int x0, int y0, int x1, int y1, PImage mask) {
 }
 
 void keyPressed() {
-  if (mode == AppMode.SETUP) {
+  /*if (mode == AppMode.SETUP) {
     if (key == CODED) {
       switch (keyCode) {
         case UP:
@@ -558,5 +601,5 @@ void keyPressed() {
     plotter.moveTo(0, 0, 0);
   } else if (key == 'p') {
     plotter.moveTo(200, 800);
-  }
+  }*/
 }
