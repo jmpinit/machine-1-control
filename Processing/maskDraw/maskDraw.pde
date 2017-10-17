@@ -7,6 +7,15 @@ import processing.awt.PSurfaceAWT;
 
 import hypermedia.net.*;
 
+// Set these to the real-world dimensions of the machine's work space
+final int MACHINE_WIDTH_IN_MM = 1000;
+final int MACHINE_HEIGHT_IN_MM = 1000;
+
+// Measured for Machine1
+final float MM_PER_X_STEP = 0.04604f;
+final float MM_PER_Y_STEP = 0.05048f;
+final float MM_PER_Z_STEP = 0.0037f;
+
 Vector<Tuple<PVector, PVector>> plottedLines;
 
 Plotter plotter;
@@ -37,7 +46,7 @@ void setup() {
   if (possibleArduinoPorts.length == 0) {
     println("No Arduinos found. Simulating only.");
 
-    plotter = new SimulatedPlotter(Plotter.Tool.AIRBRUSH, 1000, 1000);
+    plotter = new SimulatedPlotter(Plotter.Tool.AIRBRUSH, MM_PER_X_STEP, MM_PER_Y_STEP, MM_PER_Z_STEP, MACHINE_WIDTH_IN_MM, MACHINE_HEIGHT_IN_MM);
 
     (new Thread(new Runnable() {
       public void run() {
@@ -50,7 +59,7 @@ void setup() {
       }
     })).start();
   } else {
-    plotter = new Plotter(Plotter.Tool.AIRBRUSH, 1000, 1000);
+    plotter = new Plotter(Plotter.Tool.AIRBRUSH, MM_PER_X_STEP, MM_PER_Y_STEP, MM_PER_Z_STEP, MACHINE_WIDTH_IN_MM, MACHINE_HEIGHT_IN_MM);
 
     final PApplet that = this;
     ArduinoSelector arduinoSelector = new ArduinoSelector(possibleArduinoPorts, new ArduinoSelector.SelectionListener() {
@@ -142,7 +151,7 @@ void draw() {
 
   paintOnMask();
 
-  strokeWidth(1);
+  strokeWeight(1);
   stroke(255, 0, 0);
   synchronized (plottedLines) {
     for (Tuple<PVector, PVector> line : plottedLines) {
@@ -156,7 +165,7 @@ void draw() {
   List<PVector> plotterPath = plotter.getPath();
   PVector lastPlotterPt = plotterPath.get(0);
 
-  strokeWidth(3);
+  strokeWeight(3);
   stroke(0, 255, 0);
 
   synchronized (plotterPath) {

@@ -2,6 +2,8 @@ import java.util.*;
 import processing.core.PVector;
 
 class Plotter implements Runnable {
+  protected final float mmPerXStep, mmPerYStep, mmPerZStep;
+
   protected Vector<PVector> path;
   protected boolean spraying;
 
@@ -10,10 +12,6 @@ class Plotter implements Runnable {
 
   protected Vector<Instruction> instructions;
   protected Vector<MessageListener> messageListeners;
-
-  private final float MM_PER_X_STEP = 0.04604f;
-  private final float MM_PER_Y_STEP = 0.05048f;
-  private final float MM_PER_Z_STEP = 0.0037f;
 
   private final float widthInMM, heightInMM;
   private int lastX, lastY, lastZ;
@@ -26,8 +24,13 @@ class Plotter implements Runnable {
   private final Tool tool;
 
   // Width and height in mm
-  public Plotter(Tool tool, float widthInMM, float heightInMM) {
+  public Plotter(Tool tool, float mmPerXStep, float mmPerYStep, float mmPerZStep, float widthInMM, float heightInMM) {
     this.tool = tool;
+
+    this.mmPerXStep = mmPerXStep;
+    this.mmPerYStep = mmPerYStep;
+    this.mmPerZStep = mmPerZStep;
+
     this.widthInMM = widthInMM;
     this.heightInMM = heightInMM;
 
@@ -72,9 +75,9 @@ class Plotter implements Runnable {
   }
 
   public void moveTo(float x, float y, float z) {
-    int stepsX = (int)(x / MM_PER_X_STEP);
-    int stepsY = (int)(y / MM_PER_Y_STEP);
-    int stepsZ = (int)(z / MM_PER_Z_STEP);
+    int stepsX = (int)(x / mmPerXStep);
+    int stepsY = (int)(y / mmPerYStep);
+    int stepsZ = (int)(z / mmPerZStep);
 
     float distance = (float)Math.sqrt(Math.pow(stepsX - lastX, 2) + Math.pow(stepsY - lastY, 2) + Math.pow(stepsZ - lastZ, 2));
 
@@ -124,11 +127,11 @@ class Plotter implements Runnable {
   }
 
   public float getWidthInSteps() {
-    return widthInMM / MM_PER_X_STEP;
+    return widthInMM / mmPerXStep;
   }
 
   public float getHeightInSteps() {
-    return heightInMM / MM_PER_Y_STEP;
+    return heightInMM / mmPerYStep;
   }
 
   public void run() {

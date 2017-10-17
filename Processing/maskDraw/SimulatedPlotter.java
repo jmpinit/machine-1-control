@@ -4,8 +4,8 @@ import java.util.Vector;
 public class SimulatedPlotter extends Plotter {
   private final float VELOCITY = 1000;
 
-  public SimulatedPlotter(Tool tool, float widthInMM, float heightInMM) {
-    super(tool, widthInMM, heightInMM);
+  public SimulatedPlotter(Tool tool, float mmPerXStep, float mmPerYStep, float mmPerZStep, float widthInMM, float heightInMM) {
+    super(tool, mmPerXStep, mmPerYStep, mmPerZStep, widthInMM, heightInMM);
   }
 
   protected void processNextInstruction() {
