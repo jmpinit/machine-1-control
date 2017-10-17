@@ -2,6 +2,8 @@
 #include <AccelStepper.h>
 #include <MultiStepper.h>
 
+// PIN DEFINITIONS
+
 const int PIN_STEPPER_X_STEP = 11;
 const int PIN_STEPPER_X_DIR = 12;
 
@@ -17,14 +19,25 @@ const int PIN_STEPPER_Z_DIR = 5;
 const int PIN_SERVO1 = 2;
 const int PIN_SERVO2 = 3;
 
+// SETTINGS
+
+const bool X_FLIP = false;
+const bool Y_FLIP = false;
+const bool Z_FLIP = false;
+
+const int X_SPEED = 300;
+const int X_ACCEL = 100;
+const int Y_SPEED = 300;
+const int Y_ACCEL = 50;
+const int Z_SPEED = 1200;
+const int Z_ACCEL = 800;
+
 AccelStepper stepperX(1, PIN_STEPPER_X_STEP, PIN_STEPPER_X_DIR);
 AccelStepper stepperY1(1, PIN_STEPPER_Y1_STEP, PIN_STEPPER_Y1_DIR);
 AccelStepper stepperY2(1, PIN_STEPPER_Y2_STEP, PIN_STEPPER_Y2_DIR);
 AccelStepper stepperZ(1, PIN_STEPPER_Z_STEP, PIN_STEPPER_Z_DIR);
 
 MultiStepper steppers;
-
-int s = 10;
 
 Servo panServo, tiltServo;
 Servo triggerServo, paintServo;
@@ -42,16 +55,16 @@ const int PAINT_MAX = 95;
 void setup() {
   Serial.begin(57600);
 
-  stepperX.setMaxSpeed(300);
-  stepperX.setAcceleration(100);
+  stepperX.setMaxSpeed(X_SPEED);
+  stepperX.setAcceleration(X_ACCEL);
 
-  stepperY1.setMaxSpeed(300);
-  stepperY1.setAcceleration(50);
-  stepperY2.setMaxSpeed(300);
-  stepperY2.setAcceleration(50);
+  stepperY1.setMaxSpeed(Y_SPEED);
+  stepperY1.setAcceleration(Y_ACCEL);
+  stepperY2.setMaxSpeed(Y_SPEED);
+  stepperY2.setAcceleration(Y_ACCEL);
 
-  stepperZ.setMaxSpeed(1200);
-  stepperZ.setAcceleration(800);
+  stepperZ.setMaxSpeed(Z_SPEED);
+  stepperZ.setAcceleration(Z_ACCEL);
 
   steppers.addStepper(stepperX);
   steppers.addStepper(stepperY1);
@@ -119,20 +132,10 @@ void loop() {
         zValue |= c << 8;
 
         if (command == 'm') {
-          positions[0] = xValue;
-          positions[1] = yValue;
-          positions[2] = -yValue;
-          positions[3] = zValue;
-
-          Serial.print("ARD: ");
-          Serial.print(positions[0]);
-          Serial.print(", ");
-          Serial.print(positions[1]);
-          Serial.print(", ");
-          Serial.print(positions[2]);
-          Serial.print(", ");
-          Serial.print(positions[3]);
-          Serial.println();
+          positions[0] = xValue * (X_FLIP ? 1 : -1);
+          positions[1] = yValue * (Y_FLIP ? 1 : -1);
+          positions[2] = -yValue * (Y_FLIP ? 1 : -1);
+          positions[3] = zValue * (Z_FLIP ? 1 : -1);
 
           steppers.moveTo(positions);
           running = true;

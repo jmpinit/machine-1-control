@@ -283,7 +283,7 @@ void serialEvent(Serial port) {
     if (buffer.equals("d\n")) {
       plotter.receiveMessage('d');
     } else {
-      print(buffer);
+      print("Arduino:", buffer);
     }
 
     buffer = "";
