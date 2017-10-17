@@ -1,27 +1,11 @@
-import java.util.Vector;
 import processing.core.PVector;
+import java.util.Vector;
 
 public class SimulatedPlotter extends Plotter {
   private final float VELOCITY = 1000;
 
-  private Vector<PVector> path;
-  private boolean spraying;
-
   public SimulatedPlotter(Tool tool, float widthInMM, float heightInMM) {
     super(tool, widthInMM, heightInMM);
-
-    path = new Vector<PVector>();
-    path.add(new PVector(0, 0, 0));
-
-    spraying = false;
-  }
-
-  public boolean isSpraying() {
-    return spraying;
-  }
-
-  public PVector getPosition() {
-    return path.lastElement().copy();
   }
 
   protected void processNextInstruction() {
@@ -45,7 +29,9 @@ public class SimulatedPlotter extends Plotter {
             Thread.sleep(timeToCompleteMove);
           } catch (InterruptedException e) {}
 
-          path.add(new PVector(x, y, z));
+          synchronized (path) {
+            path.add(new PVector(x, y, z));
+          }
           break;
         case 'r':
           // TODO implement

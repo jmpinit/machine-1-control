@@ -1,6 +1,10 @@
 import java.util.*;
+import processing.core.PVector;
 
 class Plotter implements Runnable {
+  protected Vector<PVector> path;
+  protected boolean spraying;
+
   protected boolean running;
   protected boolean atTarget;
 
@@ -36,6 +40,25 @@ class Plotter implements Runnable {
 
     this.atTarget = false;
     this.running = true;
+
+    path = new Vector<PVector>();
+    path.add(new PVector(0, 0, 0));
+
+    spraying = false;
+  }
+
+  public boolean isSpraying() {
+    return spraying;
+  }
+
+  public PVector getPosition() {
+    return path.lastElement().copy();
+  }
+
+  public List<PVector> getPath() {
+    synchronized (path) {
+      return path;
+    }
   }
 
   public void stop() {
@@ -77,6 +100,7 @@ class Plotter implements Runnable {
   }
 
   public void spray(boolean spraying) {
+    this.spraying = spraying;
     instructions.add(new SprayInstruction(spraying));
   }
 
@@ -130,6 +154,16 @@ class Plotter implements Runnable {
           try {
             Thread.sleep(10);
           } catch (InterruptedException e) {}
+        }
+
+        int[] instruction = nextInstruction.getData();
+
+        if ((char)instruction[0] == 'm') {
+          int x = (instruction[2] << 8) | instruction[1];
+          int y = (instruction[4] << 8) | instruction[3];
+          int z = (instruction[6] << 8) | instruction[5];
+
+          path.add(new PVector(x, y, z));
         }
 
         atTarget = false;

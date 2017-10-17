@@ -142,14 +142,34 @@ void draw() {
 
   paintOnMask();
 
-  stroke(255);
+  strokeWidth(1);
+  stroke(255, 0, 0);
   synchronized (plottedLines) {
     for (Tuple<PVector, PVector> line : plottedLines) {
       PVector start = line.x;
       PVector end = line.y;
 
-      stroke(255, 0, 0);
       line(start.x, start.y, end.x, end.y);
+    }
+  }
+
+  List<PVector> plotterPath = plotter.getPath();
+  PVector lastPlotterPt = plotterPath.get(0);
+
+  strokeWidth(3);
+  stroke(0, 255, 0);
+
+  synchronized (plotterPath) {
+    for (PVector point : plotterPath) {
+      float y1 = lastPlotterPt.x / plotter.getWidthInSteps() * width;
+      float x1 = lastPlotterPt.y / plotter.getHeightInSteps() * height;
+      float y2 = point.x / plotter.getWidthInSteps() * width;
+      float x2 = point.y / plotter.getHeightInSteps() * height;
+
+      //println(x1, y1, x2, y2);
+
+      line(x1, y1, x2, y2);
+      lastPlotterPt = point;
     }
   }
 }
