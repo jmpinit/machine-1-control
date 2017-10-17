@@ -134,7 +134,7 @@ void loop() {
         if (command == 'm') {
           positions[0] = xValue * (X_FLIP ? 1 : -1);
           positions[1] = yValue * (Y_FLIP ? 1 : -1);
-          positions[2] = -yValue * (Y_FLIP ? 1 : -1);
+          positions[2] = -yValue * (Y_FLIP ? -1 : 1);
           positions[3] = zValue * (Z_FLIP ? 1 : -1);
 
           steppers.moveTo(positions);
