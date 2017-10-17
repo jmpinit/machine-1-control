@@ -1,5 +1,4 @@
 import java.util.*;
-import java.awt.*;
 import java.awt.event.ActionListener;
 import java.awt.event.ActionEvent;
 
@@ -7,55 +6,8 @@ import processing.serial.*;
 import processing.awt.PSurfaceAWT;
 
 import hypermedia.net.*;
-//import org.mozilla.javascript.*;
 
-/* THE PLAN
-
-Build the path out of MotionSegments which can be parameterized by distance
-Make it easy to recalculate the path from a JS function
-
-# EFFECTS
-
-Effects that do not modify path:
-  * dotted line
-  * thick at segment ends, thin in center
-  * paint size depends on shadowed pixel value in underlying image>q
-
-Effects that modify path:
-  * gravity: all lines bend toward attractors
-    - attraction depends on local image intensity
-  * confine to preset corridors
-    - grid
-    - city streets
-    - small, touching circles
-  * inertial brush: simulate very heavy brush that takes a while to stop
-  * sinewave with random amplitude
-  * fat raster line: zig back and forth to make line larger
-  * fat dithered line: raster line while flipping air on/off based on line darkness
-
-# BRUSHES
-
-Triggers
-  * ever
-
-Function gets called with a context object. Return value is a set of points with the format: { x, y, z, paint, air }. 
-
-Available inputs:
-  * state (initialized from JSON file)
-  * aspect ratio
-  * points in path so far
-  * time since last point
-
-API
-  * velocity vector
-
-*/
-
-ViveConnection vive;
-int PORT_RX = 8051;
-String HOST_IP = "127.0.0.1";
-
-Vector<Tuple<PVector, PVector>> lines;
+Vector<Tuple<PVector, PVector>> plottedLines;
 
 Plotter plotter;
 Thread plotterThread;
@@ -67,92 +19,74 @@ Vector<Tuple<String, PImage>> namedImages;
 int lastMouseX = 0;
 int lastMouseY = 0;
 
-float lastPlotterX = 0;
-float lastPlotterY = 0;
 boolean spraying = false;
 
 boolean haveDrawn = false;
 boolean leftMask = false;
-
-enum AppMode {
-  SETUP,
-  PAINT,
-};
-
-AppMode mode = AppMode.SETUP;
-//SetupState setup;
 
 void setup() {
   size(900, 900);
 
   namedImages = new Vector<Tuple<String, PImage>>();
 
-  /*
-  // Creates and enters a Context. The Context stores information
-  // about the execution environment of a script.
-  Context cx = Context.enter();
-  try {
-      // Initialize the standard objects (Object, Function, etc.)
-      // This must be done before scripts can be executed. Returns
-      // a scope object that we use in later calls.
-      Scriptable scope = cx.initStandardObjects();
+  String[] serialPortPaths = Serial.list();
+  List<String> possibleArduinoPortsList = ArduinoSelector.filterPorts(serialPortPaths);
+  String[] possibleArduinoPorts = new String[possibleArduinoPortsList.size()];
+  possibleArduinoPorts = possibleArduinoPortsList.toArray(possibleArduinoPorts);
 
-      // Now evaluate the string we've colected.
-      Object result = cx.evaluateString(scope, "5 + 20", "<cmd>", 1, null);
+  if (possibleArduinoPorts.length == 0) {
+    println("No Arduinos found. Simulating only.");
 
-      // Convert the result to a string and print it.
-      println(Context.toString(result));
-  } finally {
-      // Exit from the context.
-      Context.exit();
-  }
-  */
+    plotter = new SimulatedPlotter(Plotter.Tool.AIRBRUSH, 1000, 1000);
 
-  vive = new ViveConnection();
-  vive.connect(HOST_IP, PORT_RX);
+    (new Thread(new Runnable() {
+      public void run() {
+        try {
+          Thread.sleep(3000);
+        } catch (InterruptedException e) {}
 
-  /*
-  final PApplet that = this;
-  ArduinoSelector arduinoSelector = new ArduinoSelector(Serial.list(), new ArduinoSelector.SelectionListener() {
-    public void selected(String port) {
-      final Serial arduinoPort = new Serial(that, port, 57600);
+        plotterThread = new Thread(plotter);
+        plotterThread.start();
+      }
+    })).start();
+  } else {
+    plotter = new Plotter(Plotter.Tool.AIRBRUSH, 1000, 1000);
 
-      plotter.addMessageListener(new Plotter.MessageListener() {
-        public void onMessage(int[] message) {
-          char cmd = (char)message[0];
+    final PApplet that = this;
+    ArduinoSelector arduinoSelector = new ArduinoSelector(possibleArduinoPorts, new ArduinoSelector.SelectionListener() {
+      public void selected(String port) {
+        final Serial arduinoPort = new Serial(that, port, 57600);
 
-          int a = (message[2] << 8) | message[1];
-          int b = (message[4] << 8) | message[3];
-          int c = (message[6] << 8) | message[5];
+        plotter.addMessageListener(new Plotter.MessageListener() {
+          public void onMessage(int[] message) {
+            char cmd = (char)message[0];
 
-          println("Hey, plotter has a message:", cmd, a, b, c);
-          for (int i = 0; i < message.length; i++) {
-            arduinoPort.write(message[i]);
+            int a = (message[2] << 8) | message[1];
+            int b = (message[4] << 8) | message[3];
+            int c = (message[6] << 8) | message[5];
+
+            println("Hey, plotter has a message:", cmd, a, b, c);
+            for (int i = 0; i < message.length; i++) {
+              arduinoPort.write(message[i]);
+            }
           }
-        }
-      });
+        });
 
-      (new Thread(new Runnable() {
-        public void run() {
-          try {
-            Thread.sleep(3000);
-          } catch (InterruptedException e) {}
+        (new Thread(new Runnable() {
+          public void run() {
+            try {
+              Thread.sleep(3000);
+            } catch (InterruptedException e) {}
 
-          plotterThread = new Thread(plotter);
-          plotterThread.start();
-        }
-      })).start();
-    }
-  });
+            plotterThread = new Thread(plotter);
+            plotterThread.start();
+          }
+        })).start();
+      }
+    });
+  }
 
-  String currentImageName = loadStrings("config.txt")[0];
-  mask = loadImage(currentImageName);
-  mask.resize((int)(mask.width * 1.8), (int)(mask.height * 1.8));
-
-  lines = new Vector<Tuple<PVector, PVector>>();
-
-  plotter = new Plotter(Plotter.Tool.AIRBRUSH, 1000, 1000);*/
-  //setup = new SetupState(plotter);
+  plottedLines = new Vector<Tuple<PVector, PVector>>();
 
   registerMethod("dispose", this);
 
@@ -206,37 +140,18 @@ void draw() {
     image(combinedMask, 0, 0);
   }
 
-  /*
-  // Draw machine bounds
-  Bounds screenBounds = setup.getScreenBounds(width, height);
-
-  // Draw mask image
-  image(mask, screenBounds.left, screenBounds.top);
+  paintOnMask();
 
   stroke(255);
-  noFill();
-  rect(screenBounds.left, screenBounds.top, screenBounds.width, screenBounds.height);
+  synchronized (plottedLines) {
+    for (Tuple<PVector, PVector> line : plottedLines) {
+      PVector start = line.x;
+      PVector end = line.y;
 
-  if (mode == AppMode.SETUP) {
-    noStroke();
-    fill(0, 255, 0);
-    PVector pos = setup.currentPosition();
-    ellipse(pos.x, pos.y, 10, 10);
-  } else if (mode == AppMode.PAINT) {
-    paintOnMask();
-
-    stroke(255);
-    synchronized (lines) {
-      for (Tuple<PVector, PVector> line : lines) {
-        PVector start = line.x;
-        PVector end = line.y;
-
-        stroke(255, 0, 0);
-        line(start.x, start.y, end.x, end.y);
-      }
+      stroke(255, 0, 0);
+      line(start.x, start.y, end.x, end.y);
     }
   }
-  */
 }
 
 Bounds imagesBounds(Vector<PImage> images) {
@@ -287,48 +202,41 @@ PImage recalculateMask() {
 }
 
 void paintOnMask() {
-  /*
-  Bounds machineBounds = setup.getBounds();
-  PVector viveLoc = getNormalizedLocation();
+  if (combinedMask == null) {
+    return;
+  }
 
-  if (viveLoc.x >= 0 && viveLoc.y >= 0 && viveLoc.x < width && viveLoc.y < height) {
-    float x = viveLoc.x;
-    float y = viveLoc.y;
+  PVector pointer = new PVector(mouseX, mouseY);
 
-    Bounds screenBounds = setup.getScreenBounds(width, height);
+  if (pointer.x >= 0 && pointer.y >= 0 && pointer.x < width && pointer.y < height) {
+    float imageX = pointer.x;
+    float imageY = pointer.y;
 
-    float imageX = x * screenBounds.width;
-    float imageY = y * screenBounds.height;
-
-    fill(255, 0, 0);
-    noStroke();
-    ellipse(screenBounds.left + x * screenBounds.width, screenBounds.top + y * screenBounds.height, 8, 8);
-
-    if (onMask((int)imageX, (int)imageY, mask)) {
+    if (onMask((int)imageX, (int)imageY, combinedMask)) {
       if (leftMask) {
         // Mouse has entered the mask
-        PVector entryPt = lastPointOnMask((int)imageX, (int)imageY, lastMouseX, lastMouseY, mask);
+        PVector entryPt = lastPointOnMask((int)imageX, (int)imageY, lastMouseX, lastMouseY, combinedMask);
         moveTo(entryPt.x, entryPt.y);
         plotter.spray(true);
         spraying = true;
         moveTo(imageX, imageY);
-        lines.add(new Tuple<PVector, PVector>(new PVector(entryPt.x, entryPt.y), new PVector(imageX, imageY)));
+        plottedLines.add(new Tuple<PVector, PVector>(new PVector(entryPt.x, entryPt.y), new PVector(imageX, imageY)));
         leftMask = false;
       }
 
-      if (onMask(lastMouseX, lastMouseY, (int)imageX, (int)imageY, mask)) {
+      if (onMask(lastMouseX, lastMouseY, (int)imageX, (int)imageY, combinedMask)) {
         moveTo(imageX, imageY);
-        lines.add(new Tuple<PVector, PVector>(new PVector(lastMouseX, lastMouseY), new PVector(imageX, imageY)));
+        plottedLines.add(new Tuple<PVector, PVector>(new PVector(lastMouseX, lastMouseY), new PVector(imageX, imageY)));
       }
     } else {
       if (leftMask == false) {
         // Last position was on the mask
-        PVector exitPt = lastPointOnMask(lastMouseX, lastMouseY, (int)imageX, (int)imageY, mask);
+        PVector exitPt = lastPointOnMask(lastMouseX, lastMouseY, (int)imageX, (int)imageY, combinedMask);
         moveTo(exitPt.x, exitPt.y);
         plotter.spray(false);
         spraying = false;
 
-        lines.add(new Tuple<PVector, PVector>(new PVector(lastMouseX, lastMouseY), new PVector(exitPt.x, exitPt.y)));
+        plottedLines.add(new Tuple<PVector, PVector>(new PVector(lastMouseX, lastMouseY), new PVector(exitPt.x, exitPt.y)));
 
         leftMask = true;
       }
@@ -337,72 +245,14 @@ void paintOnMask() {
     lastMouseX = (int)imageX;
     lastMouseY = (int)imageY;
   }
-  */
 }
 
-enum Tool {
-  SOLID,
-  DASH,
-}
-Tool activeTool = Tool.SOLID;
-
-float dashSize = 10;
-float dashAcc = 0;
-boolean dashActive = false;
-
-/*void moveTo(float x, float y) {
+void moveTo(float x, float y) {
   float plotterX = map(x, 0, width, 0, plotter.getWidthInMM());
   float plotterY = map(y, 0, height, 0, plotter.getHeightInMM());
 
-  if (spraying) {
-    if (activeTool == Tool.DASH) {
-      while (true) {
-        float lineLength = dist(lastPlotterX, lastPlotterY, plotterX, plotterY);
-
-        float lenToNext = dashSize - dashAcc % dashSize;
-
-        if (lenToNext > lineLength) {
-          // Line fits inside dash, nothing special to do
-          plotter.moveTo(plotterX, plotterY);
-          dashAcc += lineLength;
-          lastPlotterX = plotterX;
-          lastPlotterY = plotterY;
-          break;
-        } else {
-          // There will be at least one transition
-          float angle = atan2(plotterY - lastPlotterY, plotterX - lastPlotterX);
-
-          float nx = lastPlotterX + lenToNext * cos(angle);
-          float ny = lastPlotterY + lenToNext * sin(angle);
-
-          plotter.moveTo(nx, ny, 0);
-          lastPlotterX = nx;
-          lastPlotterY = ny;
-
-          dashAcc += lenToNext;
-          lenToNext = dashSize - dashAcc % dashSize;
-
-          if (lenToNext < 0) {
-            throw new RuntimeException();
-          }
-
-          dashActive = !dashActive;
-          plotter.spray(dashActive);
-        }
-      }
-    } else {
-      plotter.moveTo(plotterX, plotterY, 0);
-
-      lastPlotterX = plotterX;
-      lastPlotterY = plotterY;
-    }
-  } else {
-    plotter.moveTo(plotterX, plotterY, 0);
-
-    lastPlotterX = plotterX;
-    lastPlotterY = plotterY;
-  }
-}*/
+  plotter.moveTo(plotterX, plotterY, 0);
+}
 
 String buffer = "";
 void serialEvent(Serial port) {
@@ -429,23 +279,6 @@ void dispose() {
   } catch (InterruptedException e) {}
 
   println("dispose called");
-}
-
-PVector getNormalizedLocation() {
-  float minX = -40;
-  float maxX = 90;
-
-  float minY = -110;
-  float maxY = 70;
-
-  float minZ = -150;
-  float maxZ = 68;
-
-  float normX = map((float)vive.posX(), minX, maxX, 1, 0);
-  float normZ = map((float)vive.posY(), minZ, maxZ, 0, 1);
-  float normY = map((float)vive.posZ(), minY, maxY, 0, 1);
-
-  return new PVector(normX, normY, normZ);
 }
 
 boolean onMask(int x, int y, PImage mask) {
@@ -556,50 +389,9 @@ PVector lastPointOnMask(int x0, int y0, int x1, int y1, PImage mask) {
 }
 
 void keyPressed() {
-  /*if (mode == AppMode.SETUP) {
-    if (key == CODED) {
-      switch (keyCode) {
-        case UP:
-          setup.jogUp();
-          break;
-        case LEFT:
-          setup.jogLeft();
-          break;
-        case DOWN:
-          setup.jogDown();
-          break;
-        case RIGHT:
-          setup.jogRight();
-          break;
-      }
-    } else {
-      switch (key) {
-        case 'w':
-          setup.jogUp();
-          break;
-        case 'a':
-          setup.jogLeft();
-          break;
-        case 's':
-          setup.jogDown();
-          break;
-        case 'd':
-          setup.jogRight();
-          break;
-        case ' ':
-          setup.setLowerRight();
-          break;
-        case ENTER:
-          mode = AppMode.PAINT;
-          break;
-      }
-    }
-  } else if (mode == AppMode.PAINT) {
-  }
-
   if (key == 'h') {
     plotter.moveTo(0, 0, 0);
   } else if (key == 'p') {
     plotter.moveTo(200, 800);
-  }*/
+  }
 }

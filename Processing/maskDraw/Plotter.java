@@ -115,7 +115,7 @@ class Plotter implements Runnable {
     processNextInstruction();
   }
 
-  private void processNextInstruction() {
+  protected void processNextInstruction() {
     if (!instructions.isEmpty()) {
       Instruction nextInstruction = instructions.firstElement();
       instructions.remove(0);

@@ -1,8 +1,20 @@
-import javax.swing.*;
-import java.awt.*;
+import java.util.*;
+import javax.swing.JFrame;
+import javax.swing.JPanel;
+import javax.swing.JRadioButton;
+import javax.swing.JButton;
+import javax.swing.ButtonGroup;
+import javax.swing.ButtonModel;
+import javax.swing.BoxLayout;
 import java.awt.event.*;
 
 public class ArduinoSelector extends JFrame implements ActionListener {
+  private static final String[] DISALLOWED_PORT_SIGNATURES = {
+    "Bluetooth",
+    "SPPD",
+    "iPhone"
+  };
+
   private final ButtonGroup arduinoGroup;
   private final SelectionListener selectionListener;
 
@@ -46,6 +58,27 @@ public class ArduinoSelector extends JFrame implements ActionListener {
       this.selectionListener.selected(model.getActionCommand());
       dispose();
     }
+  }
+
+  public static List filterPorts(String[] serialPortPaths) {
+    Vector<String> possiblePorts = new Vector<String>();
+
+    for (String portPath : serialPortPaths) {
+      boolean allowed = true;
+
+      for (String disallowedSignature : DISALLOWED_PORT_SIGNATURES) {
+        if (portPath.contains(disallowedSignature)) {
+          allowed = false;
+          break;
+        }
+      }
+
+      if (allowed) {
+        possiblePorts.add(portPath);
+      }
+    }
+
+    return possiblePorts;
   }
 
   interface SelectionListener {
