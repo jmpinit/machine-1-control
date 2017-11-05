@@ -8,6 +8,8 @@ import processing.video.*;
 
 import blobDetection.*;
 
+final boolean SIMULATE = false;
+
 // Set these to the real-world dimensions of the machine's work space
 final int MACHINE_WIDTH_IN_MM = 1000;
 final int MACHINE_HEIGHT_IN_MM = 1000;
@@ -43,8 +45,8 @@ void setup() {
   String[] possibleArduinoPorts = new String[possibleArduinoPortsList.size()];
   possibleArduinoPorts = possibleArduinoPortsList.toArray(possibleArduinoPorts);
 
-  if (possibleArduinoPorts.length == 0) {
-    println("No Arduinos found. Simulating only.");
+  if (SIMULATE || possibleArduinoPorts.length == 0) {
+    println(SIMULATE ? "Simulating..." : "No Arduinos found. Simulating only.");
 
     plotter = new SimulatedPlotter(Plotter.Tool.AIRBRUSH, MM_PER_X_STEP, MM_PER_Y_STEP, MM_PER_Z_STEP, MACHINE_WIDTH_IN_MM, MACHINE_HEIGHT_IN_MM);
 
