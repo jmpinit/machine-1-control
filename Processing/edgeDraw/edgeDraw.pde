@@ -40,62 +40,57 @@ BlobDetection blobDetection;
 void setup() {
   size(800, 800);
 
-  String[] serialPortPaths = Serial.list();
-  List<String> possibleArduinoPortsList = ArduinoSelector.filterPorts(serialPortPaths);
-  String[] possibleArduinoPorts = new String[possibleArduinoPortsList.size()];
-  possibleArduinoPorts = possibleArduinoPortsList.toArray(possibleArduinoPorts);
-
-  if (SIMULATE || possibleArduinoPorts.length == 0) {
-    println(SIMULATE ? "Simulating..." : "No Arduinos found. Simulating only.");
-
+  if (SIMULATE) {
     plotter = new SimulatedPlotter(Plotter.Tool.AIRBRUSH, MM_PER_X_STEP, MM_PER_Y_STEP, MM_PER_Z_STEP, MACHINE_WIDTH_IN_MM, MACHINE_HEIGHT_IN_MM);
-
-    (new Thread(new Runnable() {
-      public void run() {
-        try {
-          Thread.sleep(3000);
-        } catch (InterruptedException e) {}
-
-        plotterThread = new Thread(plotter);
-        plotterThread.start();
-      }
-    })).start();
+    println("Simulating...");
   } else {
-    plotter = new Plotter(Plotter.Tool.AIRBRUSH, MM_PER_X_STEP, MM_PER_Y_STEP, MM_PER_Z_STEP, MACHINE_WIDTH_IN_MM, MACHINE_HEIGHT_IN_MM);
+    // Try finding serial port connection
+    String[] serialPortPaths = Serial.list();
+    List<String> possibleArduinoPortsList = ArduinoSelector.filterPorts(serialPortPaths);
+    String[] possibleArduinoPorts = new String[possibleArduinoPortsList.size()];
+    possibleArduinoPorts = possibleArduinoPortsList.toArray(possibleArduinoPorts);
 
-    final PApplet that = this;
-    ArduinoSelector arduinoSelector = new ArduinoSelector(possibleArduinoPorts, new ArduinoSelector.SelectionListener() {
-      public void selected(String port) {
-        final Serial arduinoPort = new Serial(that, port, 57600);
+    if (possibleArduinoPorts.length == 0) {
+      plotter = new SimulatedPlotter(Plotter.Tool.AIRBRUSH, MM_PER_X_STEP, MM_PER_Y_STEP, MM_PER_Z_STEP, MACHINE_WIDTH_IN_MM, MACHINE_HEIGHT_IN_MM);
+      println("No Arduinos found. Simulating only.");
+    } else {
+      plotter = new Plotter(Plotter.Tool.AIRBRUSH, MM_PER_X_STEP, MM_PER_Y_STEP, MM_PER_Z_STEP, MACHINE_WIDTH_IN_MM, MACHINE_HEIGHT_IN_MM);
+      println("Connecting to robot's Arduino.");
 
-        plotter.addMessageListener(new Plotter.MessageListener() {
-          public void onMessage(int[] message) {
-            char cmd = (char)message[0];
+      final PApplet that = this;
+      ArduinoSelector arduinoSelector = new ArduinoSelector(possibleArduinoPorts, new ArduinoSelector.SelectionListener() {
+        public void selected(String port) {
+          final Serial arduinoPort = new Serial(that, port, 57600);
 
-            int a = (message[2] << 8) | message[1];
-            int b = (message[4] << 8) | message[3];
-            int c = (message[6] << 8) | message[5];
+          plotter.addMessageListener(new Plotter.MessageListener() {
+            public void onMessage(int[] message) {
+              char cmd = (char)message[0];
 
-            println("Hey, plotter has a message:", cmd, a, b, c);
-            for (int i = 0; i < message.length; i++) {
-              arduinoPort.write(message[i]);
+              int a = (message[2] << 8) | message[1];
+              int b = (message[4] << 8) | message[3];
+              int c = (message[6] << 8) | message[5];
+
+              println("Hey, plotter has a message:", cmd, a, b, c);
+              for (int i = 0; i < message.length; i++) {
+                arduinoPort.write(message[i]);
+              }
             }
-          }
-        });
-
-        (new Thread(new Runnable() {
-          public void run() {
-            try {
-              Thread.sleep(3000);
-            } catch (InterruptedException e) {}
-
-            plotterThread = new Thread(plotter);
-            plotterThread.start();
-          }
-        })).start();
-      }
-    });
+          });
+        }
+      });
+    }
   }
+
+  (new Thread(new Runnable() {
+    public void run() {
+      try {
+        Thread.sleep(3000);
+      } catch (InterruptedException e) {}
+
+      plotterThread = new Thread(plotter);
+      plotterThread.start();
+    }
+  })).start();
 
   plottedLines = new Vector<Tuple<PVector, PVector>>();
 
