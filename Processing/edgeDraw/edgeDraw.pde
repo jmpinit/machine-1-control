@@ -233,9 +233,23 @@ void keyPressed() {
 
     println("Will draw", simplifiedEdges.size(), " edges");
 
+    // Pick a random size and location
+    float drawWidth = random(0, width / 4);
+    float drawHeight = drawWidth * height / width;
+    PVector drawSize = new PVector(drawWidth, drawHeight);
+    drawSize.normalize();
+    PVector drawOrigin = new PVector(random(0, width - drawWidth), random(0, height - drawHeight));
+
     for (LinearSegment edge : simplifiedEdges) {
       PVector start = edge.getPoint(0);
       PVector end = edge.getPoint(1);
+
+      // Move and scale vector to drawing region
+      start.x = drawOrigin.x + drawWidth * start.x / width;
+      start.y = drawOrigin.y + drawHeight * start.y / height;
+
+      end.x = drawOrigin.x + drawWidth * end.x / width;
+      end.y = drawOrigin.y + drawHeight * end.y / height;
 
       moveTo(start.x, start.y);
       plotter.spray(true);
