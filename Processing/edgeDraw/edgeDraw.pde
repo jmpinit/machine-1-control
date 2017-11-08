@@ -20,6 +20,7 @@ final float MM_PER_Y_STEP = 0.05048f;
 final float MM_PER_Z_STEP = 0.0037f;
 
 Vector<Tuple<PVector, PVector>> plottedLines;
+Vector<LinearSegment> edgesLastFrame;
 
 Plotter plotter;
 Thread plotterThread;
@@ -120,7 +121,29 @@ void draw() {
 
   if (lastFrame != null) {
     // Show a little preview in the lower right corner
+    int threshold = (int)map(mouseY, 0, height, 0, 255);
+    lastFrame.filter(THRESHOLD, threshold / 255.0f);
+    for (int i = 0; i < 5; i++) {
+      lastFrame.filter(ERODE);
+    }
     image(lastFrame, 3 * width / 4, 3 * height / 4, width / 4, height / 4);
+
+    edgesLastFrame = imageToEdges(lastFrame.copy(), threshold);
+
+    strokeWeight(1);
+    stroke(0, 0, 255);
+    for (LinearSegment edge : edgesLastFrame) {
+      PVector start = edge.getPoint(0);
+      PVector end = edge.getPoint(1);
+
+      // Scale the coordinates to fit in the preview box
+      float sx1 = map(start.x, 0, width, 3 * width / 4, width);
+      float sy1 = map(start.y, 0, height, 3 * height / 4, height);
+      float sx2 = map(end.x, 0, width, 3 * width / 4, width);
+      float sy2 = map(end.y, 0, height, 3 * height / 4, height);
+
+      line(sx1, sy1, sx2, sy2);
+    }
   }
 
   strokeWeight(1);
@@ -186,27 +209,50 @@ void moveTo(float x, float y) {
 }
 
 void keyPressed() {
-  if (lastFrame == null) {
-    return;
-  }
+  if (key == ' ') {
+    if (lastFrame == null) {
+      return;
+    }
 
-  edgeFrame = lastFrame.copy();
-  Vector<Edge> edges = getEdges(edgeFrame);
-  
-  for (Edge edge : edges) {
-    moveTo(edge.x1, edge.y1);
-    plotter.spray(true);
-    moveTo(edge.x2, edge.y2);
-    plotter.spray(false);
+    Vector<SegmentedSegment> allSegments = sortEdgesIntoSegments(edgesLastFrame);
+
+    // Simplify the edges by removing very short segments
+    // and resampling the curves with the same point density throughout
+    Vector<LinearSegment> simplifiedEdges = new Vector<LinearSegment>();
+    for (SegmentedSegment segment : allSegments) {
+      if (segment.length() < 5) {
+        continue;
+      }
+
+      float slice = 1.0f / (segment.length() / 10.0f);
+
+      for (float i = slice; i < 1; i += slice) {
+        simplifiedEdges.add(new LinearSegment(segment.getPoint(i - slice), segment.getPoint(i)));
+      }
+    }
+
+    println("Will draw", simplifiedEdges.size(), " edges");
+
+    for (LinearSegment edge : simplifiedEdges) {
+      PVector start = edge.getPoint(0);
+      PVector end = edge.getPoint(1);
+
+      moveTo(start.x, start.y);
+      plotter.spray(true);
+      moveTo(end.x, end.y);
+      plotter.spray(false);
+    }
   }
 }
 
-Vector<Edge> getEdges(PImage image, int threshold) {
-  Vector<Edge> edges = new Vector<Edge>();
-  
+Vector<LinearSegment> imageToEdges(PImage image, int threshold) {
   blobDetection.setThreshold(map(threshold, 0, 255, 0, 1));
   blobDetection.computeBlobs(image.pixels);
+
+  // Get the edges in whatever order the blob detection algorithm gives them
   
+  Vector<LinearSegment> edges = new Vector<LinearSegment>();
+
   for (int n = 0; n < blobDetection.getBlobNb(); n++) {
     Blob blob = blobDetection.getBlob(n);
     
@@ -216,26 +262,40 @@ Vector<Edge> getEdges(PImage image, int threshold) {
         EdgeVertex vertB = blob.getEdgeVertexB(m);
         
         if (vertA != null && vertB != null) {
-          edges.add(new Edge(vertA.x * image.width, vertA.y * image.height, vertB.x * image.width, vertB.y * image.height));
+          edges.add(new LinearSegment(vertA.x * image.width, vertA.y * image.height, vertB.x * image.width, vertB.y * image.height));
         }
       }
     }
   }
-  
+
   return edges;
 }
 
-Vector<Edge> getEdges(PImage image) {
-  return getEdges(image, 127);
-}
+Vector<SegmentedSegment> sortEdgesIntoSegments(Vector<LinearSegment> edges) {
+  // Sort the edges so they line up end to end
 
-class Edge {
-  public final float x1, x2, y1, y2;
-  
-  public Edge(float x1, float y1, float x2, float y2) {
-    this.x1 = x1;
-    this.y1 = y1;
-    this.x2 = x2;
-    this.y2 = y2;
+  Vector<SegmentedSegment> sortedEdges = new Vector<SegmentedSegment>();
+
+  while (edges.size() != 0) {
+    SegmentedSegment segmentInProgress = new SegmentedSegment();
+
+    LinearSegment first = edges.get(0);
+    edges.remove(first);
+    segmentInProgress.add(first);
+
+    for (Iterator<LinearSegment> edgeIter = edges.iterator(); edgeIter.hasNext();) {
+      LinearSegment second = edgeIter.next();
+
+      if (SegmentedSegment.near(first.getPoint(1), second.getPoint(0), 5)) {
+        edgeIter.remove();
+        segmentInProgress.add(new LinearSegment(first.getPoint(1), second.getPoint(1)));
+        first = second;
+      }
+    }
+
+    SegmentedSegment finishedSegment = segmentInProgress;
+    sortedEdges.add(finishedSegment);
   }
+
+  return sortedEdges;
 }

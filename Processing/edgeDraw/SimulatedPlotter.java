@@ -25,11 +25,6 @@ public class SimulatedPlotter extends Plotter {
           PVector pos = path.lastElement().position;
           int timeToCompleteMove = (int)(1000 * dist(pos.x, pos.y, pos.z, x, y, z) / VELOCITY);
 
-          try {
-            //Thread.sleep(timeToCompleteMove);
-            Thread.sleep(1);
-          } catch (InterruptedException e) {}
-
           synchronized (path) {
             path.add(new Waypoint(x, y, z, spraying));
           }
